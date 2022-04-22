@@ -8,20 +8,20 @@ import sys
 import xml.etree.ElementTree as ET
 from getpass import getpass
  
-def print_package_info(pkg_ele):
+def print_package_info(url_base, pkg_ele):
   #print(ET.dump(pkg_ele)) #Uncomment to print full package XML element
-  name = pkg.find("./name")
-  lic = pkg.find("./format/license")
-  arch = pkg.find("./arch")
-  version = pkg.find("./version") 
-  checksum = pkg.find("./checksum")
-  location = pkg.find("./location")
+  name = pkg_ele.find("./name")
+  lic = pkg_ele.find("./format/license")
+  arch = pkg_ele.find("./arch")
+  version = pkg_ele.find("./version") 
+  checksum = pkg_ele.find("./checksum")
+  location = pkg_ele.find("./location")
   print("Name: %s" % name.text)
   print("License: %s" % lic.text)
   print("Arch: %s" % arch.text)
   print("Version: %s-%s" % (version.attrib['ver'], version.attrib['rel']))
   print("Checksum: %s" % checksum.text)
-  print("URL: %s%s%s\n" % (base, location.attrib['href'], token))
+  print("URL: %s%s%s\n" % (url_base[0], location.attrib['href'], url_base[1]))
 
 #Parse for pagination
 def process_rels(response):
@@ -42,16 +42,16 @@ def strip_namespaces(xml_string):
   return xml_stripped
 
 #Fetch and unpack gzipped XML
-def parse_xml_gzip(element):
+def parse_xml_gzip(h, url_base, ele):
   href_ele = ele.find("./location")
   href = href_ele.attrib['href']
-  url = "%s%s%s" % (base, href, token)
+  url = "%s%s%s" % (url_base[0], href, url_base[1])
   xml_gzip = h.request(url, "GET")
   xml_dec = gzip.decompress(xml_gzip[1])
   xml = ET.fromstring(strip_namespaces(xml_dec))
   return xml
 
-if __name__ == "__main__":
+def main():
   h = httplib2.Http(".cache")
   #h.add_credentials(sys.argv[1], sys.argv[2])
   #request_url = sys.argv[3]
@@ -83,8 +83,9 @@ if __name__ == "__main__":
         if regex.match(curr):
           #Split URL at token
           base, token = regex.findall(curr)[0]
+          url_base = (base, token)
           #Fetch repodata
-          url = "%s%s%s" % (base, "repodata/repomd.xml", token)
+          url = "%s%s%s" % (url_base[0], "repodata/repomd.xml", url_base[1])
           (resp, subcontent) = h.request(url, "GET")
           #Generate XML tree
           tree = ET.fromstring(strip_namespaces(subcontent))
@@ -92,10 +93,13 @@ if __name__ == "__main__":
 
           for ele in elems:
             #print(ET.dump(ele))
-            xml = parse_xml_gzip(ele)
+            xml = parse_xml_gzip(h, url_base, ele)
             for pkg in xml.findall("./package[@type='rpm']"):
               print("Product: %s" % content['name']) 
               print("Product Description: %s" % content['description']) 
               if 'distro_target' in content:
                 print("Distro Target: %s" % content['distro_target']) 
-              print_package_info(pkg)
+              print_package_info(url_base, pkg)
+
+if __name__ == "__main__":
+    main()
